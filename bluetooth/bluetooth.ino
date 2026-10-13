@@ -6,7 +6,7 @@
 
 HardwareSerial &Bluetooth = Serial1;
 
-enum Command{
+enum Command {
   CMD_LIGHTS_ON    = '0',
   CMD_LIGHTS_OFF   = '1',
   CMD_UNLOCK_DOOR  = '2',
@@ -45,8 +45,9 @@ void loop() {
         Serial.println("garage closed");
         break;
       default:
-        Serial.print("Unknown command ");
-        Serial.println(byte);
+        Serial.print("Unknown command '");
+        Serial.print(byte);
+        Serial.println("'");
     }
   }
 }
