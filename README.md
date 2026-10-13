@@ -17,11 +17,7 @@ Den beste er nok å bruke en ssh-nøkkel
 
 ### Sette opp ssh-nøkkel:
 1. Generere ssh-nøkkel.
-  - Sørg for at openssh er installert
-    - Windows: skriv `Add-Windows-Capability -Online -Name OpenSSH.Client~~~~0.0.1.0`
-      inn i powershell åpnet med administrator privilegier.
-    - Linux: last ned openssh med din package manager
-  - kjør `ssh-keygen`
+  - kjør `ssh-keygen` i terminalen, bare trykk enter for alle spørsmål
 2. Last din public key opp på github profilen din
   - Logg in på github.com
   - Trykk på profilbildet ditt
