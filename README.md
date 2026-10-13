@@ -3,9 +3,10 @@
 
 - `git clone "git@github.com:oscar-kanskje/smarthus"` kopier dette git repositoret til pc-en din
 
+
+- `git pull` hent andres endringer av repoet fra github
 - `git add` legg til endrede filer (kan bruke `git add *` for å legge til alle endrede filer)
 - `git commit -m 'beskrivelse av endringer'` bekreft endringer
-- `git pull` hent andres endringer av repoet fra github
 - `git push` send dine endringer av repoet til github
 
 ## Info om git operasjoner som kobler seg til github
