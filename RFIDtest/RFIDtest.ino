@@ -1,48 +1,45 @@
-#include <Keypad.h>
+// VCC  : 3.3V 
+// RST  : A0
+// GND  : GND
+// MISO : 50
+// MOSI : 51
+// SCK  : 52
+// SDA  : 53
 
-const int ROW_NUM = 4; //four rows
-const int COLUMN_NUM = 3; //three columns
 
-char keys[ROW_NUM][COLUMN_NUM] = {
-  {'1','2','3'},
-  {'4','5','6'},
-  {'7','8','9'}, 
-  {'*','0','#'}
-};
+#include <SPI.h>
+#include <MFRC522.h>
 
-byte pin_rows[ROW_NUM] = {9, 8, 7, 6}; //connect to the row pinouts of the keypad
-byte pin_column[COLUMN_NUM] = {5, 4, 3}; //connect to the column pinouts of the keypad
+#define SS_PIN 53 // The Arduino Mega pin connected to the SS pin of RC522 module
+#define RST_PIN A0 // The Arduino Mega pin connected to the RST pin of RC522 module
 
-Keypad keypad = Keypad( makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM );
+MFRC522 rfid(SS_PIN, RST_PIN);
 
-const String password = "1234"; // change your password here
-String input_password;
-
-void setup(){
+void setup() {
   Serial.begin(9600);
-  input_password.reserve(32); // maximum input characters is 33, change if needed
+  SPI.begin(); // init SPI bus
+  rfid.PCD_Init(); // init MFRC522
+
+  Serial.println("Tap RFID/NFC Tag on reader");
 }
 
-void loop(){
-  char key = keypad.getKey();
+void loop() {
+  if (rfid.PICC_IsNewCardPresent()) { // new tag is available
+    if (rfid.PICC_ReadCardSerial()) { // NUID has been readed
+      MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+      //Serial.print("RFID/NFC Tag Type: ");
+      //Serial.println(rfid.PICC_GetTypeName(piccType));
 
-  if (key){
-    Serial.println(key);
-
-    if(key == '*') {
-      input_password = ""; // clear input password
-    } else if(key == '#') {
-      if(password == input_password) {
-        Serial.println("password is correct");
-        // DO YOUR WORK HERE
-        
-      } else {
-        Serial.println("password is incorrect, try again");
+      // print NUID in Serial Monitor in the hex format
+      Serial.print("UID:");
+      for (int i = 0; i < rfid.uid.size; i++) {
+        Serial.print(rfid.uid.uidByte[i] < 0x10 ? " 0" : " ");
+        Serial.print(rfid.uid.uidByte[i], HEX);
       }
+      Serial.println();
 
-      input_password = ""; // clear input password
-    } else {
-      input_password += key; // append new character to input password string
+      rfid.PICC_HaltA(); // halt PICC
+      rfid.PCD_StopCrypto1(); // stop encryption on PCD
     }
   }
 }
