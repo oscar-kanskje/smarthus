@@ -123,24 +123,21 @@ bool bt_get_state = false;
 
 //----------- End of global variables
 
-bool uidsEqual(MFRC522::Uid *uid_a,MFRC522::Uid *uid_b) {
-  if (uid_a->size != uid_b->size) return false;
-  return 0 == memcmp(&uid_a->uidByte, &uid_b->uidByte, uid_a->size);
-}
 
-// returns false if not moving
-bool stepperStep() {
+// This is a timer interrupt handler
+// used for moving the stepper motor
+ISR(TIMER1_COMPA_vect) {
   if (home_state.doorlock_open) {
     if (home_state.current_lock_step < STEPPER_STEPS / 4) {
       home_state.current_lock_step += 1;
     } else {
-      return false;
+      return;
     }
   } else {
     if (home_state.current_lock_step > 0) {
       home_state.current_lock_step -= 1;
     } else {
-      return false;
+      return;
     }
   }
   // I have changed the write sequence from
@@ -175,7 +172,11 @@ bool stepperStep() {
       digitalWrite(pin_stepper_in4, HIGH);
       break;
   }
-  return true;
+}
+
+bool uidsEqual(MFRC522::Uid *uid_a,MFRC522::Uid *uid_b) {
+  if (uid_a->size != uid_b->size) return false;
+  return 0 == memcmp(&uid_a->uidByte, &uid_b->uidByte, uid_a->size);
 }
 
 void setup() {
@@ -202,6 +203,13 @@ void setup() {
   pinMode(pin_stepper_in2, OUTPUT);
   pinMode(pin_stepper_in3, OUTPUT);
   pinMode(pin_stepper_in4, OUTPUT);
+
+  // Setup timer interrupt for stepper motor
+  TCCR1A = 0;
+  TCCR1B = bit(WGM12) | bit(CS10);
+  // increasing this decreases stepper speed (it is almost max speen now) 
+  OCR1A  = 30000;
+  TIMSK1 = bit(OCIE1A);
 
   SPI.begin();
   rfid.PCD_Init();
@@ -266,12 +274,6 @@ void loop() {
 
   digitalWrite(pin_light, home_state.lights_on ? HIGH : LOW);
   analogWrite(pin_servo, home_state.garage_open ? SERVO_OPEN : SERVO_CLOSED);
-
-  // this should be in a timer interrupt, or stepperStep() should be
-  while (stepperStep()) {
-    uint32_t limit = micros() + 1500;
-    while (micros() < limit) {}
-  }
 
   // this condition makes sure the lcd isn't refreshed all the time
   if (millis() > home_state.lcd_timeout_until) {
