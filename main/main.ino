@@ -49,7 +49,14 @@
 // Light led
 // in: 40
 
-
+// Keypad
+// R1: 22
+// R2: 23
+// R3: 24
+// R4: 25
+// C1: 26
+// C2: 27
+// C3: 28
 
 // these PWM values were found by testing
 #define SERVO_OPEN   1
@@ -61,7 +68,11 @@
 #define RFID_TIMEOUT 1000
 
 // how long before the lcd screen updates
-#define LCD_TIMEOUT 50
+#define LCD_TIMEOUT 500
+
+#define KEYPAD_ROWS 4
+#define KEYPAD_COLS 3
+#define KEYPAD_WAIT_MS 300
 
 // light pins
 const uint8_t pin_light = 40;
@@ -82,7 +93,17 @@ const uint8_t pin_stepper_in2 = 9;
 const uint8_t pin_stepper_in3 = 10;
 const uint8_t pin_stepper_in4 = 11;
 const uint8_t pin_buzzer = 12;
+const uint8_t pin_keypad_rows[KEYPAD_ROWS] = {22,23,24,25};
+const uint8_t pin_keypad_cols[KEYPAD_COLS] = {26,27,28};
 
+const char keypad_keymap[KEYPAD_ROWS][KEYPAD_COLS] = {
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'},
+};
+
+const char keypad_correct_pin[4] = {'1','1','5','9'};
 
 struct HomeState {
   bool use_photoresistor;
@@ -95,9 +116,16 @@ struct HomeState {
   uint32_t lcd_timeout_until;
 };
 
+struct Keypad {
+  char last_key;
+  uint32_t last_time;
+  char pin[5]; // 5 for å ha plass til 0 byte på slutten
+  uint8_t len;
+};
+
 //------------ Global variables
 // this is 'volatile' since it is written from
-// the stepper motor timer interrupt
+// the stepper motor timer interrupt... 
 volatile HomeState home_state = {
   .use_photoresistor = true,
   .lights_on = false,
@@ -108,6 +136,14 @@ volatile HomeState home_state = {
   .rfid_timeout_until = 0,
   .lcd_timeout_until = 0,
 };
+
+Keypad keypad = {
+  .last_key = 0,
+  .last_time = 0,
+  .pin = {0,0,0,0},
+  .len = 0,
+};
+
 
 // First argument is address??
 // address of what??
@@ -179,6 +215,51 @@ bool uidsEqual(MFRC522::Uid *uid_a,MFRC522::Uid *uid_b) {
   return 0 == memcmp(&uid_a->uidByte, &uid_b->uidByte, uid_a->size);
 }
 
+void clearKeypad() {
+  keypad.len = 0;
+  memset(&keypad.pin,0,4);
+}
+
+void updateKeypad() {
+  if (keypad.last_time < millis()) keypad.last_key = 0;
+
+  for (uint8_t i = 0; i < KEYPAD_ROWS; i += 1) {
+    digitalWrite(pin_keypad_rows[i], LOW);
+    for (uint8_t j = 0; j < KEYPAD_COLS; j += 1) {
+       if (!digitalRead(pin_keypad_cols[j])) {
+          const char key = keypad_keymap[i][j];
+
+          if (key == keypad.last_key) continue;
+
+          if (key == '#') {
+            home_state.doorlock_open = false;
+            clearKeypad();
+            continue;
+          }
+
+          if (key == '*') {
+            clearKeypad();
+            continue;
+          }
+
+          keypad.pin[keypad.len] = key;
+          keypad.len += 1;
+          keypad.last_key = key;
+          keypad.last_time = millis() + KEYPAD_WAIT_MS;
+
+          if (0 == memcmp(&keypad.pin, &keypad_correct_pin, 4)) {
+               home_state.doorlock_open = true;
+               clearKeypad();
+          } else if (keypad.len > 4) {
+              tone(pin_buzzer,440,500);
+              clearKeypad();
+          }
+       }
+    }
+    digitalWrite(pin_keypad_rows[i], HIGH);
+  }
+}
+
 void setup() {
   Serial.begin(9600);
 
@@ -204,6 +285,15 @@ void setup() {
   pinMode(pin_stepper_in3, OUTPUT);
   pinMode(pin_stepper_in4, OUTPUT);
 
+  for (uint8_t i = 0; i < KEYPAD_ROWS; i += 1) {
+    pinMode(pin_keypad_rows[i], OUTPUT);
+  }
+  for (uint8_t i = 0; i < KEYPAD_COLS; i += 1) {
+    pinMode(pin_keypad_cols[i], INPUT_PULLUP);
+  }
+
+  pinMode(pin_buzzer, OUTPUT);
+
   // Setup timer interrupt for stepper motor
   TCCR1A = 0;
   TCCR1B = bit(WGM12) | bit(CS10);
@@ -221,7 +311,9 @@ void setup() {
 
 
 void loop() {
+  updateKeypad();
 
+  // tror denne forårsaker feil...???
   if (Bluetooth.available()) {
     const char byte = Bluetooth.read();
     Serial.print("(Info) Received bluetooth command '");
@@ -272,31 +364,33 @@ void loop() {
     }
   }
 
+
+
   digitalWrite(pin_light, home_state.lights_on ? HIGH : LOW);
   analogWrite(pin_servo, home_state.garage_open ? SERVO_OPEN : SERVO_CLOSED);
+  // doorlock handled in timer interrupt
+
 
   // this condition makes sure the lcd isn't refreshed all the time
   if (millis() > home_state.lcd_timeout_until) {
     // maybe use our own symbols instead of esoteric codes
-    char statestr1[16] = "PR:x L:x G:x D:x";
-    char statestr2[16] = "CR:x";
-    statestr1[3]  = home_state.use_photoresistor ? 't' : 'f';
-    statestr1[7]  = home_state.lights_on ? 't' : 'f';
-    statestr1[11] = home_state.garage_open ? 'o' : 'c';
-    statestr1[15] = home_state.doorlock_open ? 'o' : 'c';
-    statestr2[3]  = home_state.card_error ? 't' : 'f';
+    char statestr[16] = "PR:x L:x G:x D:x";
+    statestr[3]  = home_state.use_photoresistor ? 't' : 'f';
+    statestr[7]  = home_state.lights_on ? 't' : 'f';
+    statestr[11] = home_state.garage_open ? 'o' : 'c';
+    statestr[15] = home_state.doorlock_open ? 'o' : 'c';
     lcd.clear();
     lcd.setCursor(0,0);
-    lcd.print(statestr1);
+    lcd.print(statestr);
     lcd.setCursor(0,1);
-    lcd.print(statestr2);
+    lcd.print("pin: ");
+    lcd.print(keypad.pin);
 
     // maybe write nicer state messages over bluetooth
     if (bt_get_state) {
-      Bluetooth.print(statestr1);
-      Bluetooth.print(" ");
-      Bluetooth.print(statestr2);
-      Bluetooth.print("\n");
+      Bluetooth.println(statestr);
+      Bluetooth.print("pin: ");
+      Bluetooth.println(keypad.pin);
       bt_get_state = false;
     }
 
