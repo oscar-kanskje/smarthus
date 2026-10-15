@@ -58,9 +58,10 @@
 // C2: 27
 // C3: 28
 
-// these PWM values were found by testing
-#define SERVO_OPEN   1
-#define SERVO_CLOSED 130
+// These are used as pulse width modulation values for analogWrite
+// but i think they at most can be 255.. but this still works
+#define SERVO_OPEN   500
+#define SERVO_CLOSED 800
 
 #define STEPPER_STEPS 2048
 
@@ -250,7 +251,7 @@ void updateKeypad() {
           if (0 == memcmp(&keypad.pin, &keypad_correct_pin, 4)) {
                home_state.doorlock_open = true;
                clearKeypad();
-          } else if (keypad.len > 4) {
+          } else if (keypad.len >= 4) {
               tone(pin_buzzer,440,500);
               clearKeypad();
           }
@@ -308,6 +309,7 @@ void setup() {
     Serial.println("(Info) Rfid reader initialized");
   }
 }
+
 
 
 void loop() {
@@ -374,7 +376,7 @@ void loop() {
   // this condition makes sure the lcd isn't refreshed all the time
   if (millis() > home_state.lcd_timeout_until) {
     // maybe use our own symbols instead of esoteric codes
-    char statestr[16] = "PR:x L:x G:x D:x";
+    char statestr[17] = "PR:x L:x G:x D:x"; // 17 to include the 0 byte
     statestr[3]  = home_state.use_photoresistor ? 't' : 'f';
     statestr[7]  = home_state.lights_on ? 't' : 'f';
     statestr[11] = home_state.garage_open ? 'o' : 'c';
